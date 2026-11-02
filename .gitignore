@@ -1,0 +1,9 @@
+# Local secrets and generated artifacts
+.env
+**/.env
+result/*.jsonl
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.DS_Store

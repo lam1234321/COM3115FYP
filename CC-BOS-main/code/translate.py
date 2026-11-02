@@ -1,47 +1,34 @@
 # translate.py
-import os
-import sys
 import re
-from config import API_SECRET_KEY, BASE_URL, LOCAL_MODEL_PATH, DEVICE, OLLAMA_MODEL
-from utils import get_gpt_pipeline, extract_content  
-import time
-import concurrent.futures
-from functools import partial
 from typing import List, Optional
-from openai import OpenAI  
 
-# Initialize the OpenAI client
-openai_client = OpenAI(
-    api_key=API_SECRET_KEY,
-    base_url=BASE_URL
-)
+from config import TRANSLATOR_MODEL
+from utils import get_gpt_pipeline
 
 
 def preprocess_and_segment_text(classical_text: str, max_segment_length: int = 2000) -> List[str]:
-
-    cleaned_text = re.sub(r"[◎■※【】]", "", classical_text)
+    """Split long classical Chinese text into sentence-aligned chunks."""
+    cleaned_text = re.sub(r"[◎■※【】]", "", classical_text or "")
     segments = []
-    
+
     while len(cleaned_text) > max_segment_length:
         split_pos = -1
-
         for pos in range(max_segment_length, max_segment_length - 100, -1):
             if pos < len(cleaned_text) and cleaned_text[pos] in ["。", "！", "？", "」", "》", "；", "，"]:
                 split_pos = pos + 1
                 break
-        
- 
+
         if split_pos == -1:
             split_pos = max_segment_length
-        
+
         segments.append(cleaned_text[:split_pos])
         cleaned_text = cleaned_text[split_pos:]
-    
-    segments.append(cleaned_text) 
+
+    segments.append(cleaned_text)
     return segments
 
-def create_translation_prompt(segment_text: str) -> str:
 
+def create_translation_prompt(segment_text: str) -> str:
     return f"""
     你是一位精通中国古典文学和英文的翻译专家。请执行以下翻译任务：
 
@@ -88,48 +75,35 @@ def create_translation_prompt(segment_text: str) -> str:
     #english: [你的英文翻译结果]
     """
 
-def extract_english_result(translation_response: str) -> Optional[str]:
 
+def extract_english_result(translation_response: str) -> Optional[str]:
     if not translation_response:
         return None
-    
+
     if "#english:" in translation_response:
         return translation_response.split("#english:")[1].strip()
-    else:
-        return None
+    return None
+
+
 def translate_single_segment(
     segment_text: str,
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
-    max_tokens: int = 2000
+    model_name: Optional[str] = None,
+    max_tokens: int = 2000,
 ) -> Optional[str]:
-
     prompt = create_translation_prompt(segment_text)
-    
+    model_name = model_name or TRANSLATOR_MODEL
+
     try:
-        if model_type == "api":
-
-            response = openai_client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "You are a professional translator"},
-                    {"role": "user", "content": prompt}
-                ],
-            )
-            result = response.choices[0].message.content
-
-        else:
-            from utils import get_gpt_pipeline
-            result = get_gpt_pipeline(
-                text=prompt,
-                model_id=model_name,
-                max_tokens=max_tokens,
-                model_type=model_type
-            )
-        
+        result = get_gpt_pipeline(
+            text=prompt,
+            model_id=model_name,
+            max_tokens=max_tokens,
+            model_type=model_type,
+            system_prompt="You are a professional translator",
+        )
         return extract_english_result(result)
-    
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - one bad segment must not abort the run
         print(f"Errors in classical Chinese translation: {e}")
         return None
 
@@ -137,12 +111,11 @@ def translate_single_segment(
 def serial_translate_segments(
     segments: List[str],
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
-    max_tokens: int = 2000
+    model_name: Optional[str] = None,
+    max_tokens: int = 2000,
 ) -> str:
-
     results = []
-    
+
     for i, segment in enumerate(segments):
         print(f"Translating segment {i+1}/{len(segments)} ...")
         try:
@@ -150,18 +123,15 @@ def serial_translate_segments(
                 segment,
                 model_type,
                 model_name,
-                max_tokens
+                max_tokens,
             )
-            
             if result is None:
                 print(f"Warning: Translation of paragraph {i+1} failed, using placeholder")
                 result = f"[Translation of paragraph {i+1} failed]"
-            
             results.append(result)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Error: Exception occurred while translating segment {i+1}: {str(e)}")
             results.append(f"[Translation of paragraph {i+1} failed]")
-    
 
     return " ".join(results)
 
@@ -169,17 +139,14 @@ def serial_translate_segments(
 def classical_chinese_to_english(
     classical_text: str,
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
-    max_tokens: int = 2000
+    model_name: Optional[str] = None,
+    max_tokens: int = 2000,
 ) -> Optional[str]:
-
     segments = preprocess_and_segment_text(classical_text)
-    
+
     return serial_translate_segments(
         segments,
         model_type,
         model_name,
-        max_tokens
+        max_tokens,
     )
-
-
