@@ -1,113 +1,180 @@
 # Obscure but Effective: Classical Chinese Jailbreak Prompt Optimization via Bio-Inspired Search
-📢 **News:** Our paper has been **accepted to ICLR 2026**! 🎉 
->  This is the official version.
+
+📢 **News:** Our paper has been **accepted to ICLR 2026**! 🎉
+
+> This is the official version.
 
 As Large Language Models (LLMs) are increasingly used, their security risks have drawn increasing attention. Existing research reveals that LLMs are highly susceptible to jailbreak attacks, with effectiveness varying across language contexts. This paper investigates the role of classical Chinese in jailbreak attacks. Owing to its conciseness and obscurity, classical Chinese can partially bypass existing safety constraints, exposing notable vulnerabilities in LLMs. Based on this observation, this paper proposes a framework, CC-BOS, for the automatic generation of classical Chinese adversarial prompts based on multi-dimensional fruit fly optimization, facilitating efficient and automated jailbreak attacks in black-box settings. Prompts are encoded into eight policy dimensions—covering role, behavior, mechanism, metaphor, expression, knowledge, trigger pattern and context; and iteratively refined via smell search, visual search, and cauchy mutation. This design enables efficient exploration of the search space, thereby enhancing the effectiveness of black-box jailbreak attacks. To enhance readability and evaluation accuracy, we further design a classical Chinese to English translation module. Extensive experiments demonstrate that effectiveness of the proposed CC-BOS, consistently outperforming state-of-the-art jailbreak attack methods.
 
 ![CC-BOS Framework Architecture](./images/framework.png)
 
+> **Research use only.** This code implements attacks against LLM safety
+> mechanisms. Only run it against models you are authorised to test, and follow
+> the usage policy of every API provider you use.
+
 ## Installation
 
 ### Prerequisites
 
-  - Python 3.8 or higher
-  - Access to an API for a large language model (e.g., OpenAI API key).
+- Python 3.8 or higher
+- API access to the victim model and the attacker model (OpenAI-compatible endpoints)
 
-### Setup
+### Option A — minimal pip install (recommended)
 
-1.  **Create and activate the Conda environment:**
-    This project uses a Conda environment for dependency management.
+```bash
+cd CC-BOS-main
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-    ```bash
-    conda env create -f environment.yml
-    conda activate ase
-    ```
+The runtime only needs `openai`, `tqdm` and `requests`. No GPU, PyTorch or
+`pandas` is required for the API pipeline.
 
-2.  **Configure API Keys:**
-    Update the `config.py` file with your API keys and base URLs for the LLMs you intend to use.
+### Option B — Conda
 
-    ```python
-    # config.py
-    API_SECRET_KEY = "YOUR_API_KEY"
-    BASE_URL = "YOUR_BASE_URL"
-    ```
+The original `environment.yml` is kept for reproducibility of the paper's
+full environment (CUDA / vLLM / local-model stack). It is much heavier than
+what `code/` actually needs.
 
+```bash
+conda env create -f environment.yml
+conda activate ase
+```
 
-3. **Import Keys in Other Files**
+## Configuration
 
-    Modify scripts like `gen.py` and `utils.py` to import variables directly from `config.py`.
+Credentials are read from environment variables, so nothing secret needs to be
+committed. You can also edit the defaults in `code/config.py`.
 
-    ```python
-    # Example: gen.py
+```bash
+# Victim model (the model being attacked)
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"   # optional
+export TARGET_MODEL="gpt-4o"
 
-    # Initialize clients using the imported variables.
-    openai_client = OpenAI(
-        api_key=API_SECRET_KEY,
-        base_url=BASE_URL
-    )
+# Attacker / translator model (DeepSeek-compatible)
+export DEEPSEEK_API_KEY="sk-..."
+export DEEPSEEK_BASE_URL="https://api.deepseek.com/v1"
+export ATTACK_MODEL="deepseek-chat"
 
-    deepseek_client = OpenAI(
-        api_key=DEEPSEEK_API_KEY,
-        base_url=DEEPSEEK_BASE_URL
-    )
-    ```
+# Judge
+export JUDGE_MODEL="gpt-4o"
+```
+
+If `DEEPSEEK_API_KEY` is omitted it falls back to `OPENAI_API_KEY`.
+
+### Fully offline smoke test
+
+A mock mode is included so the whole pipeline can be validated without any API
+key or network request:
+
+```bash
+python code/gen.py --mock --limit 2 --population_size 2 --max_iter 1
+```
+
+Mock responses follow the same output contracts as the real models
+(`#The_New_Question_With_Our_Intention:`, `#english:` and `#thescore:`), so the
+optimization, translation, scoring and output-writing paths are all exercised.
+The scores produced in mock mode are **not** experimental results.
 
 ## Usage
 
-### 1\. Prepare Your Data
+### 1. Prepare your data
 
-The project reads intentions and prompts from a CSV file. Ensure your input file contains the following columns:
+The input is a CSV (or JSONL) file. CSV columns:
 
-  - `goal`: The original user prompt.
-  - `target`: The desired harmful response.
-  - `intention`: The original user prompt.(used for evaluation).
+| Column | Meaning |
+|---|---|
+| `goal` | The original user prompt/query |
+| `intention` | The harmful intent, used for evaluation (falls back to `goal`) |
+| `target` | The desired harmful response (optional, kept for compatibility) |
 
-### 2\. Run the Prompt Generation Script
+`data/test.csv` contains two **benign placeholder rows** used only to check that
+the pipeline runs. Replace them with your own benchmark data (AdvBench, CLAS
+2024, StrongREJECT-small) before collecting results.
 
-Execute `gen.py` from the command line. You can customize the generation process using command-line arguments.
+### 2. Run prompt generation
 
 ```bash
-python gen.py --population_size 5 --max_iter 5 --prompts_path test.csv
+python code/gen.py --input_file data/test.csv --population_size 5 --max_iter 5
 ```
 
-### Command-line Arguments
+The path resolution is relative to the project root by default, and the output
+directory is created automatically, so the command also works when run from
+`code/` or from another working directory.
 
-  - `--population_size`: The number of prompts to maintain in each optimization iteration.
-  - `--max_iter`: The maximum number of iterations for the optimization process.
-  - `--prompts_path`: The path to the CSV file containing the prompts and intentions.
+### Command-line arguments
 
-### Optimization Strategy: Fitness Score Threshold
+| Argument | Default | Description |
+|---|---|---|
+| `--input_file`, `--prompts_path` | `data/test.csv` | Input CSV/JSONL file |
+| `--data_format` | inferred | `csv` or `jsonl` |
+| `--population_size` | `5` | Number of strategies kept per iteration |
+| `--max_iter` | `5` | Maximum number of optimization iterations |
+| `--output_dir` | `result/` | Directory for output files |
+| `--threshold` | `80` | Score needed to count an attack as successful |
+| `--early_stop` | `120` | Stop optimizing once this score is reached |
+| `--limit` | all rows | Only process the first N rows |
+| `--seed` | random | Random seed for reproducibility |
+| `--mock` | off | Offline smoke test, no API calls |
 
-The early_stopping_threshold defines the target Avg.Score (Toxicity Intensity) of the model output, acting as the success criterion for the optimization:
+### Optimization strategy: fitness score threshold
 
-* **Threshold = 120 (Peak Toxicity):** Aims for an Absolute Jailbreak. Optimization continues until the model response is perfectly consistent with the harmful intent and does not contain any keywords.
-* **Threshold = 80 (Rapid Penetration):** Aims for a Substantial Jailbreak. Optimization stops once a significant toxicity level is reached, prioritizing the efficiency of eliciting non-compliant behaviors.
+The fitness score is `consistency (0-100) + keyword (0 or 20)`, so it ranges
+from 0 to 120:
 
-Users can flexibly adjust this threshold based on their specific research needs.
+- **Threshold = 120 (peak toxicity):** aims for an absolute jailbreak; the
+  optimization stops only when the response fully matches the harmful intent
+  and contains no refusal keyword.
+- **Threshold = 80 (rapid penetration):** aims for a substantial jailbreak and
+  stops once a significant toxicity level is reached, prioritising query cost.
 
-* **Note:** Lowering the threshold (e.g., to 80) significantly reduces Query Cost by prioritizing rapid jailbreak elicitation, while a higher threshold (120) maximizes the Toxicity Intensity of the generated prompts.
+Lowering the threshold (e.g. to 80) significantly reduces query cost, while a
+higher threshold (120) maximises the toxicity intensity of the generated
+prompts. `--early_stop` controls when the search stops; `--threshold` controls
+which final prompts are labelled successful.
 
+### 3. Review the results
 
-### 3\. Review the Results
+Two files are written to `--output_dir` (default `result/`):
 
-The script will generate two output files:
+- `adv_prompt.jsonl` — the final adversarial prompts (`{"prompt": ...}` per line)
+- `record.jsonl` — one record per input row with the original prompt, the
+  adversarial prompt, the raw/translated model response, consistency score,
+  total score, success flag and number of attempts.
 
-  - `adv_prompt.jsonl`: Contains the final adversarial prompts that were generated.
-  - `record.jsonl`: A detailed log of the entire process for each prompt, including the score, model responses, and a record of attempts.
+The script also prints the success count, total attempts, average attempts per
+prompt and ASR (attack success rate).
 
-## Code Structure
+## Code structure
 
 ```
-├── code/                    # Core source code directory
-│   ├── gen.py              # Main script for prompt generation, optimization, and evaluation loop
-│   ├── translate.py        # Text translation module (incl. classical Chinese to English)
-│   ├── utils.py            # Utilities (LLM API, scoring, text extraction)
-│   └── config.py           # Configuration (API keys, settings)
-├── data/                   # Datasets directory
-│   └── data.md         # Datasets documentation
-├── environment.yml         # Conda environment specification
-└── README.md              # Project documentation
+CC-BOS-main/
+├── code/
+│   ├── gen.py          # Strategy space, fruit-fly search, evaluation loop, CLI
+│   ├── api_client.py   # Unified OpenAI/Ollama client + offline mock mode
+│   ├── translate.py    # Classical Chinese -> English translation module
+│   ├── utils.py        # Judge scoring, keyword scoring, response parsing
+│   └── config.py       # Env-var driven configuration (keys, model names)
+├── data/
+│   ├── data.md         # Benchmark dataset documentation
+│   └── test.csv        # Benign smoke-test rows (replace with real data)
+├── examples/           # Screenshots of tests against public chat interfaces
+├── images/             # Framework figure (PNG + PDF)
+├── requirements.txt    # Minimal runtime dependencies
+├── environment.yml     # Full paper environment (optional, heavy)
+└── README.md
 ```
+
+## Troubleshooting
+
+- **`No API key configured`** — export `OPENAI_API_KEY` / `DEEPSEEK_API_KEY`,
+  or append `--mock` for an offline test.
+- **`input file not found`** — pass an absolute path or a path relative to the
+  current working directory; the default is `<repo>/data/test.csv`.
+- **Outputs accumulate** — both JSONL files are opened in append mode. Delete
+  `result/*.jsonl` (or use a new `--output_dir`) between experiments.
 
 ## Acknowledgements
 

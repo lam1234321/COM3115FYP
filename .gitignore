@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Runtime output
+result/
+*.log
+
+# OS
+.DS_Store
