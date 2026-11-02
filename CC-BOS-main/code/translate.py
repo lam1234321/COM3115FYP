@@ -1,19 +1,18 @@
 # translate.py
-import os
-import sys
 import re
-from config import API_SECRET_KEY, BASE_URL, LOCAL_MODEL_PATH, DEVICE, OLLAMA_MODEL
-from utils import get_gpt_pipeline, extract_content  
-import time
-import concurrent.futures
-from functools import partial
 from typing import List, Optional
-from openai import OpenAI  
 
-# Initialize the OpenAI client
-openai_client = OpenAI(
-    api_key=API_SECRET_KEY,
-    base_url=BASE_URL
+from openai import OpenAI
+
+from config import API_SECRET_KEY, BASE_URL, TRANSLATOR_MODEL
+from utils import get_gpt_pipeline
+
+# Client used for the Classical Chinese -> English module. The constructor is
+# skipped when no key is configured so that `--dry_run` works without secrets.
+openai_client = (
+    OpenAI(api_key=API_SECRET_KEY, base_url=BASE_URL or None)
+    if API_SECRET_KEY
+    else None
 )
 
 
@@ -100,14 +99,20 @@ def extract_english_result(translation_response: str) -> Optional[str]:
 def translate_single_segment(
     segment_text: str,
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
+    model_name: Optional[str] = None,
     max_tokens: int = 2000
 ) -> Optional[str]:
 
+    model_name = model_name or TRANSLATOR_MODEL
     prompt = create_translation_prompt(segment_text)
     
     try:
         if model_type == "api":
+            if openai_client is None:
+                raise RuntimeError(
+                    "No API key configured for the translator. Set "
+                    "TRANSLATOR_API_KEY (or OPENAI_API_KEY) in .env."
+                )
 
             response = openai_client.chat.completions.create(
                 model=model_name,
@@ -137,7 +142,7 @@ def translate_single_segment(
 def serial_translate_segments(
     segments: List[str],
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
+    model_name: Optional[str] = None,
     max_tokens: int = 2000
 ) -> str:
 
@@ -169,7 +174,7 @@ def serial_translate_segments(
 def classical_chinese_to_english(
     classical_text: str,
     model_type: str = "api",
-    model_name: str = "deepseek-chat",
+    model_name: Optional[str] = None,
     max_tokens: int = 2000
 ) -> Optional[str]:
 
