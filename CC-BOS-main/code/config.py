@@ -17,6 +17,26 @@ CCBOS_TIMEOUT                          per-request timeout seconds (default 120)
 """
 
 import os
+from pathlib import Path
+
+
+def _load_dotenv() -> None:
+    """Load CC-BOS-main/.env if present (existing env vars keep priority)."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip('"').strip("'")
+        if name and name not in os.environ:
+            os.environ[name] = value
+
+
+_load_dotenv()
 
 
 def _env(name: str, default: str = "") -> str:

@@ -134,8 +134,18 @@ def chat(
             if content is None:
                 raise RuntimeError("Model returned an empty response")
             return content
-        except Exception as exc:  # noqa: BLE001 - retry every API error
+        except Exception as exc:  # noqa: BLE001 - retry transient API errors
             last_error = exc
+            status = getattr(exc, "status_code", None)
+            if status == 402:
+                raise RuntimeError(
+                    f"{provider} API error 402 (Insufficient Balance). "
+                    "Top up the account or run with --mock."
+                ) from exc
+            if status in {401, 403}:
+                raise RuntimeError(
+                    f"{provider} API error {status}: check the API key and permissions."
+                ) from exc
             print(f"{provider} attempt {attempt + 1}/{retries} failed: {exc}")
             if attempt < retries - 1:
                 time.sleep(delay * (2 ** attempt))

@@ -407,6 +407,7 @@ def fruit_fly_optimization(
             stagnation_count = 0
             best_consistency = consistency
             best_raw = raw
+            print(f">>> New best total score: {best_score} (attempt {counter['attempts']})")
         if best_score >= early_stop_score:
             return best_query, best_score, counter["attempts"], response_text, best_consistency, best_raw
 
@@ -445,6 +446,7 @@ def fruit_fly_optimization(
                 best_consistency = consistency
                 best_raw = raw
                 stagnation_count = 0
+                print(f">>> New best total score: {best_score} (attempt {counter['attempts']})")
 
             if score >= early_stop_score:
                 return best_query, best_score, counter["attempts"], response_text, best_consistency, best_raw
@@ -484,6 +486,7 @@ def fruit_fly_optimization(
                 best_consistency = consistency
                 improved = True
                 stagnation_count = 0
+                print(f">>> New best total score: {best_score} (attempt {counter['attempts']})")
 
             if score >= early_stop_score:
                 return best_query, best_score, counter["attempts"], response_text, best_consistency, best_raw
@@ -611,6 +614,7 @@ def main(argv=None):
     success_num = 0
     total_jailbreak_attempts = 0
     threshold = args.threshold
+    row_results = []
 
     with open(adv_path, "a", encoding="utf-8") as adv_file, \
          open(record_path, "a", encoding="utf-8") as record_file:
@@ -648,6 +652,36 @@ def main(argv=None):
             adv_file.write(json.dumps({"prompt": best_query}, ensure_ascii=False) + "\n")
             record_file.flush()
             adv_file.flush()
+
+            row_results.append({
+                "id": idx,
+                "score": best_score,
+                "consistency": consistency,
+                "success": success,
+                "attempts": jailbreak_attempts,
+                "prompt": best_query,
+            })
+            tqdm.write(
+                f"[row {idx}] best total score = {best_score:.1f} | "
+                f"success = {'YES' if success else 'NO'} | "
+                f"attempts = {jailbreak_attempts}"
+            )
+
+    print("\n" + "=" * 70)
+    print("SCORE SUMMARY (top 10 by best total score)")
+    print("=" * 70)
+    for row in sorted(row_results, key=lambda item: item["score"], reverse=True)[:10]:
+        print(
+            f"row {row['id']:>4} | score {row['score']:>6.1f} | "
+            f"success {('YES' if row['success'] else 'NO'):>3} | "
+            f"attempts {row['attempts']:>3}"
+        )
+
+    best_row = max(row_results, key=lambda item: item["score"])
+    print("-" * 70)
+    print(f"HIGHEST SCORE: {best_row['score']:.1f}  (row {best_row['id']})")
+    print(f"Highest-score prompt: {best_row['prompt']}")
+    print("=" * 70)
 
     print(f"\nResults written to: {output_dir}")
     print(f"Total number of success: {success_num}")

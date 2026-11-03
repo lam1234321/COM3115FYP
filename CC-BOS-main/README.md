@@ -47,6 +47,9 @@ conda activate ase
 Credentials are read from environment variables, so nothing secret needs to be
 committed. You can also edit the defaults in `code/config.py`.
 
+Alternatively, copy `.env.example` to `.env` and fill in your keys; `code/config.py`
+loads `CC-BOS-main/.env` automatically, and `.env` is git-ignored.
+
 ```bash
 # Victim model (the model being attacked)
 export OPENAI_API_KEY="sk-..."
@@ -144,8 +147,22 @@ Two files are written to `--output_dir` (default `result/`):
   adversarial prompt, the raw/translated model response, consistency score,
   total score, success flag and number of attempts.
 
-The script also prints the success count, total attempts, average attempts per
-prompt and ASR (attack success rate).
+The script also prints, after every improvement, a line such as:
+
+```
+>>> New best total score: 80.0 (attempt 4)
+```
+
+and, at the end of each row, the best total score for that row:
+
+```
+[row 0] best total score = 80.0 | success = YES | attempts = 6
+```
+
+Finally, a scoreboard is printed with the top-10 rows sorted by their best
+total score, the overall **HIGHEST SCORE**, and the prompt that achieved it,
+followed by the success count, total attempts, average attempts per prompt and
+ASR (attack success rate).
 
 ## Code structure
 
